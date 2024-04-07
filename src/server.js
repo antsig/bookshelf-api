@@ -1,82 +1,80 @@
-const express = require('express');
+const Hapi = require('@hapi/hapi');
 const { nanoid } = require('nanoid');
 
-const app = express();
-app.use(express.json());
+const init = async () => {
+  const server = Hapi.server({
+    port: 9000,
+    host: 'localhost'
+  });
 
-let books = [];
+  let books = [];
 
-// Function to filter books based on query parameters
-function filterBooks(books, queryParams) {
-  let filteredBooks = [...books];
+  server.route({
+    method: 'GET',
+    path: '/books',
+    handler: (request, h) => {
+      const queryParams = request.query;
 
-  if (queryParams.name) {
-    const nameQuery = queryParams.name.toLowerCase();
-    filteredBooks = filteredBooks.filter(book => book.name.toLowerCase().includes(nameQuery));
-  }
+      // Apply filtering based on query parameters
+      let filteredBooks = [...books];
 
-  if (queryParams.reading !== undefined) {
-    const readingValue = queryParams.reading === '1' ? true : false;
-    filteredBooks = filteredBooks.filter(book => book.reading === readingValue);
-  }
+      if (queryParams.name) {
+        const nameQuery = queryParams.name.toLowerCase();
+        filteredBooks = filteredBooks.filter(book => book.name.toLowerCase().includes(nameQuery));
+      }
 
-  if (queryParams.finished !== undefined) {
-    const finishedValue = queryParams.finished === '1' ? true : false;
-    filteredBooks = filteredBooks.filter(book => book.finished === finishedValue);
-  }
+      if (queryParams.reading !== undefined) {
+        const readingValue = queryParams.reading === '1' ? true : false;
+        filteredBooks = filteredBooks.filter(book => book.reading === readingValue);
+      }
 
-  return filteredBooks;
-}
+      if (queryParams.finished !== undefined) {
+        const finishedValue = queryParams.finished === '1' ? true : false;
+        filteredBooks = filteredBooks.filter(book => book.finished === finishedValue);
+      }
 
-app.post('/books', (req, res) => {
-  const { name, year, author, summary, publisher, pageCount, readPage, reading } = req.body;
+      return h.response({ status: 'success', data: { books: filteredBooks } }).code(200);
+    }
+  });
 
-  if (!name) {
-    return res.status(400).json({ status: 'fail', message: 'Gagal menambahkan buku. Mohon isi nama buku' });
-  }
+  server.route({
+    method: 'POST',
+    path: '/books',
+    handler: (request, h) => {
+      const { name, year, author, summary, publisher, pageCount, readPage, reading } = request.payload;
 
-  if (readPage > pageCount) {
-    return res.status(400).json({ status: 'fail', message: 'Gagal menambahkan buku. readPage tidak boleh lebih besar dari pageCount' });
-  }
+      // Validation checks
+      if (!name) {
+        return h.response({ status: 'fail', message: 'Gagal menambahkan buku. Mohon isi nama buku' }).code(400);
+      }
 
-  const id = nanoid();
-  const insertedAt = new Date().toISOString();
-  const updatedAt = insertedAt;
+      if (readPage > pageCount) {
+        return h.response({ status: 'fail', message: 'Gagal menambahkan buku. readPage tidak boleh lebih besar dari pageCount' }).code(400);
+      }
 
-  const book = {
-    id, name, year, author, summary, publisher, pageCount, readPage, reading, insertedAt, updatedAt
-  };
+      // Generate unique id and timestamps
+      const id = nanoid();
+      const insertedAt = new Date().toISOString();
+      const updatedAt = insertedAt;
 
-  books.push(book);
+      const book = {
+        id, name, year, author, summary, publisher, pageCount, readPage, reading, insertedAt, updatedAt
+      };
 
-  return res.status(201).json({ status: 'success', message: 'Buku berhasil ditambahkan', data: { bookId: id } });
-});
+      // Add book to the collection
+      books.push(book);
 
-app.get('/books', (req, res) => {
-  const queryParams = req.query;
-  let filteredBooks = books;
+      return h.response({ status: 'success', message: 'Buku berhasil ditambahkan', data: { bookId: id } }).code(201);
+    }
+  });
 
-  if (Object.keys(queryParams).length > 0) {
-    filteredBooks = filterBooks(books, queryParams);
-  }
+  // Add other routes for PUT and DELETE methods
 
-  return res.status(200).json({ status: 'success', data: { books: filteredBooks } });
-});
+  await server.start();
+  console.log('Server running on %s', server.info.uri);
+};
 
-app.get('/books/:bookId', (req, res) => {
-  const { bookId } = req.params;
-  const book = books.find(b => b.id === bookId);
-
-  if (!book) {
-    return res.status(404).json({ status: 'fail', message: 'Buku tidak ditemukan' });
-  }
-
-  return res.status(200).json({ status: 'success', data: { book } });
-});
-
-// Other routes for updating and deleting books
-
-const PORT = process.env.PORT || 9000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+init().catch(err => {
+  console.error(err);
+  process.exit(1);
 });
